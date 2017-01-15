@@ -15,11 +15,11 @@ localMatrix n =
         scale scaleFactor unscaled
 
 element2Indices :: Int -> Int -> [((Int,Int), Double)]
-element2Indices n position = zip (elementIndicesSquared n position) (toList . flatten $ localMatrix n)
+element2Indices n number = zip (elementIndicesSquared n number) (toList . flatten $ localMatrix n)
   where
     leftTopIndex n p
-        | p <= 2 * n^2 = p `div` (2*n + 1) + p - 1
-        | otherwise    = (p - (2 * n^2 + 1)) `div` n + p + 2*n - 1
+        | p <= 2 * n^2 = (p - 1) `div` (2*n) + p - 1
+        | otherwise    = (p - (2 * n^2 + 1)) `div` n + p - 1 + 2*n
     increment n p
         | p <= 2 * n^2 = 2*n + 1
         | otherwise    = n + 1
@@ -33,7 +33,7 @@ considerDirichletBoundaries :: Int -> (Matrix Double, Vector Double) -> (Matrix 
 considerDirichletBoundaries n (m,v) =
     let
         row = n + 1
-        horizontalBoundary = take row [(2*n + 1)*n ..]
+        horizontalBoundary = take row [(2*n + 1) * n ..]
         commonPoint = last horizontalBoundary
         verticalBoundary = take n [commonPoint + row, commonPoint + 2*row ..]
         boundaryIndices = horizontalBoundary ++ verticalBoundary
@@ -78,8 +78,20 @@ globalIndex2Position n i
             ( 0                   + (fromIntegral m) * (elementEdgeLen n)
             , (-elementEdgeLen n) - (fromIntegral d) * (elementEdgeLen n))
 
-g :: (Double, Double) -> Double
-g (x,y) = x
+g :: Int -> (Double, Double) -> Double
+g n (x,y) =
+    -- let
+    --     d a b = abs (a - b)
+    --     (~=) a b = d a b < elementEdgeLen n / 2
+
+    --     g'
+    --         | x ~= (-1) = -y
+    --         | x ~= 1    = y
+    --         | y ~= (-1) = -x
+    --         | y ~= 1    = x
+    -- in
+    --     g'
+        (x ** 2) ** (1/3)
 
 lastUpperPointIndex :: Int -> Int
 lastUpperPointIndex n = (2*n + 1)*(n+1) - 1
@@ -103,10 +115,10 @@ neumannBoundaryIndices n =
 
         downFrom i = down i : map down (downFrom i)
     in
-        take n [0, down 0 ..]
-        ++ take (2*n) [1..]
-        ++ take (2*n) (downFrom (2*n))
-        ++ take (n-1) [globalPointsCount n - 2, globalPointsCount n - 3 ..]
+        take (n - 1) (downFrom 0)
+        ++ take (2*n + 1) [0..]
+        ++ take (2 * n) (downFrom (2 * n))
+        ++ take (n - 1) [globalPointsCount n - 2, globalPointsCount n - 3 ..]
 
 elementEdgeLen :: Int -> Double
 elementEdgeLen n = recip (fromIntegral n)
@@ -121,24 +133,23 @@ edgePositions n i
             x = fst $ globalIndex2Position n i
             y = snd $ globalIndex2Position n i
 
-            eps = 1e-6
             d a b = abs (a - b)
-            (~=) a b = d a b < eps
+            (~=) a b = d a b < (elementEdgeLen n) / 2
 
-            comparePosition a b
+            edgesByBorder x y
                 | x ~= (-1) = [(-1, y - halfEdge n), (-1, y + halfEdge n)]
                 | x ~= 1    = [(1, y + halfEdge n), (1, y - halfEdge n)]
                 | y ~= (-1) = [(x + halfEdge n, -1), (x - halfEdge n, -1)]
                 | y ~= 1    = [(x - halfEdge n, 1), (x + halfEdge n, 1)]
         in
-            comparePosition x y
+            edgesByBorder x y
   where
     lastIndex n = globalPointsCount n - 1
     halfEdge n = elementEdgeLen n / 2
 
 neumannIntegral :: Int -> Int -> Double
 neumannIntegral n i =
-    (0.5 * elementEdgeLen n *) . foldr1 (+) . map g $ edgePositions n i
+    (0.5 * elementEdgeLen n *) . foldr1 (+) . map (g n) $ edgePositions n i
     
 rhsVector :: Int -> Vector Double
 rhsVector n =
@@ -153,15 +164,19 @@ solve n =
     in
         m' <\> v'
 
-main' :: Int -> IO ()
-main' n =
+xyzs :: Int -> [(Double, Double, Double)]
+xyzs n =
     let
         xys = map (globalIndex2Position n) [0 .. (globalPointsCount n) - 1]
         zs = toList $ solve n
-        xyzs = zipWith (\(x,y) z -> (x,y,z)) xys zs
     in
-        (plot X11 $ xyzs) >>= \b
-        -> return ()
+        zipWith (\(x,y) z -> (x,y,z)) xys zs
+
+
+main' :: Int -> IO ()
+main' n = do
+    plot' [Interactive] X11 $ xyzs n
+    return ()
 
 main :: IO ()
 main = do
