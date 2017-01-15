@@ -1,13 +1,21 @@
-import Numeric.LinearAlgebra
+import System.Environment
 
-localMatrix :: Matrix Double
-localMatrix = fromLists [ [2/3, -1/6, -1/3, -1/6]
-                        , [-1/6, 2/3, -1/6, -1/3]
-                        , [-1/3, -1/6, 2/3, -1/6]
-                        , [-1/6, -1/3, -1/6, 2/3] ]
+import Numeric.LinearAlgebra
+import Graphics.EasyPlot
+
+localMatrix :: Int -> Matrix Double
+localMatrix n =
+    let
+        scaleFactor = (1 / elementEdgeLen n)^2
+        unscaled = fromLists [ [2/3, -1/6, -1/3, -1/6]
+                             , [-1/6, 2/3, -1/6, -1/3]
+                             , [-1/3, -1/6, 2/3, -1/6]
+                             , [-1/6, -1/3, -1/6, 2/3] ]
+    in
+        scale scaleFactor unscaled
 
 element2Indices :: Int -> Int -> [((Int,Int), Double)]
-element2Indices n position = zip (elementIndicesSquared n position) (toList . flatten $ localMatrix)
+element2Indices n position = zip (elementIndicesSquared n position) (toList . flatten $ localMatrix n)
   where
     leftTopIndex n p
         | p <= 2 * n^2 = p `div` (2*n + 1) + p - 1
@@ -49,9 +57,11 @@ globalMatrix :: Int -> Matrix Double
 globalMatrix n =
     let
         elementCount = 3 * n^2
-        globalPoints = concat $ map (element2Indices n) [1..elementCount]
+        globalPoints = concat $ map (element2Indices n) [1 .. elementCount]
+
+        zeros = (globalPointsCount n><globalPointsCount n) $ repeat 0
     in
-        accum ((globalPointsCount n><globalPointsCount n) $ repeat 0) (+) globalPoints
+        accum zeros (+) globalPoints
 
 globalIndex2Position :: Int -> Int -> (Double, Double)
 globalIndex2Position n i
@@ -101,28 +111,35 @@ neumannBoundaryIndices n =
 elementEdgeLen :: Int -> Double
 elementEdgeLen n = recip (fromIntegral n)
 
-findEdge :: Int -> Int -> Int -> (Double, Double)
-findEdge orient n i
-    | d i (i + signum orient) < eps * (elementEdgeLen n)    = (x n i + (fromIntegral $ signum orient) * (elementEdgeLen n)/2, y n i)
-    | otherwise                                             = (x n i, y n i + (fromIntegral $ signum orient) * (elementEdgeLen n)/2)
+edgePositions :: Int -> Int -> [(Double, Double)]
+edgePositions n i
+    | i == 0           = [(-1, 1 - halfEdge n), (-1 + halfEdge n, 1)]
+    | i == 2*n         = [(1 - halfEdge n, 1), (1, 1 - halfEdge n)]
+    | i == lastIndex n = [(1, -1 + halfEdge n), (1 - halfEdge n, -1)]
+    | otherwise =
+        let
+            x = fst $ globalIndex2Position n i
+            y = snd $ globalIndex2Position n i
+
+            eps = 1e-6
+            d a b = abs (a - b)
+            (~=) a b = d a b < eps
+
+            comparePosition a b
+                | x ~= (-1) = [(-1, y - halfEdge n), (-1, y + halfEdge n)]
+                | x ~= 1    = [(1, y + halfEdge n), (1, y - halfEdge n)]
+                | y ~= (-1) = [(x + halfEdge n, -1), (x - halfEdge n, -1)]
+                | y ~= 1    = [(x - halfEdge n, 1), (x + halfEdge n, 1)]
+        in
+            comparePosition x y
   where
-        x n i = fst $ globalIndex2Position n i
-        y n i = snd $ globalIndex2Position n i
-        d i1 i2 = (x n i1 - x n i2)^2 + (y n i1 - y n i2)^2
-        eps = 1.3
-
-leftDownEdgePos :: Int -> Int -> (Double, Double)
-leftDownEdgePos n i =
-    findEdge (-1) n i
-
-rightUpEdgePos :: Int -> Int -> (Double, Double)
-rightUpEdgePos n i =
-    findEdge 1 n i
+    lastIndex n = globalPointsCount n - 1
+    halfEdge n = elementEdgeLen n / 2
 
 neumannIntegral :: Int -> Int -> Double
 neumannIntegral n i =
-    (elementEdgeLen n) * 0.5 * ((g $ leftDownEdgePos n i) + (g $ rightUpEdgePos n i))
-
+    (0.5 * elementEdgeLen n *) . foldr1 (+) . map g $ edgePositions n i
+    
 rhsVector :: Int -> Vector Double
 rhsVector n =
     assoc (globalPointsCount n) 0 [(i, neumannIntegral n i) | i <- neumannBoundaryIndices n]
@@ -135,3 +152,18 @@ solve n =
         (m',v') = considerDirichletBoundaries n (m, v)
     in
         m' <\> v'
+
+main' :: Int -> IO ()
+main' n =
+    let
+        xys = map (globalIndex2Position n) [0 .. (globalPointsCount n) - 1]
+        zs = toList $ solve n
+        xyzs = zipWith (\(x,y) z -> (x,y,z)) xys zs
+    in
+        (plot X11 $ xyzs) >>= \b
+        -> return ()
+
+main :: IO ()
+main = do
+    (n:_) <- getArgs
+    main' (read n :: Int)
