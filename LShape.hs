@@ -5,14 +5,10 @@ import Graphics.EasyPlot
 
 localMatrix :: Int -> Matrix Double
 localMatrix n =
-    let
-        scaleFactor = (1 / elementEdgeLen n)^2
-        unscaled = fromLists [ [2/3, -1/6, -1/3, -1/6]
-                             , [-1/6, 2/3, -1/6, -1/3]
-                             , [-1/3, -1/6, 2/3, -1/6]
-                             , [-1/6, -1/3, -1/6, 2/3] ]
-    in
-        scale scaleFactor unscaled
+    fromLists [ [2/3, -1/6, -1/3, -1/6]
+              , [-1/6, 2/3, -1/6, -1/3]
+              , [-1/3, -1/6, 2/3, -1/6]
+              , [-1/6, -1/3, -1/6, 2/3] ]
 
 element2Indices :: Int -> Int -> [((Int,Int), Double)]
 element2Indices n number = zip (elementIndicesSquared n number) (toList . flatten $ localMatrix n)
@@ -80,18 +76,18 @@ globalIndex2Position n i
 
 g :: Int -> (Double, Double) -> Double
 g n (x,y) =
-    -- let
-    --     d a b = abs (a - b)
-    --     (~=) a b = d a b < elementEdgeLen n / 2
+    let
+        d a b = abs (a - b)
+        (~=) a b = d a b < elementEdgeLen n / 2
 
-    --     g'
-    --         | x ~= (-1) = -y
-    --         | x ~= 1    = y
-    --         | y ~= (-1) = -x
-    --         | y ~= 1    = x
-    -- in
-    --     g'
-        (x ** 2) ** (1/3)
+        g'
+            | x ~= (-1) = -y
+            | x ~= 1    = y
+            | y ~= (-1) = -x
+            | y ~= 1    = x
+    in
+        g'
+        -- (x ** 2) ** (1/3)
 
 lastUpperPointIndex :: Int -> Int
 lastUpperPointIndex n = (2*n + 1)*(n+1) - 1
@@ -149,7 +145,7 @@ edgePositions n i
 
 neumannIntegral :: Int -> Int -> Double
 neumannIntegral n i =
-    (0.5 * elementEdgeLen n *) . foldr1 (+) . map (g n) $ edgePositions n i
+    (0.5 * (elementEdgeLen n) *) . foldr1 (+) . map (g n) $ edgePositions n i
     
 rhsVector :: Int -> Vector Double
 rhsVector n =
@@ -161,8 +157,11 @@ solve n =
         m = globalMatrix n
         v = rhsVector n
         (m',v') = considerDirichletBoundaries n (m, v)
+        solution = linearSolve m' $ asColumn v'
     in
-        m' <\> v'
+        case solution of
+            Nothing -> vector []
+            (Just v) -> flatten v
 
 xyzs :: Int -> [(Double, Double, Double)]
 xyzs n =
