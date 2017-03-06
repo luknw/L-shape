@@ -75,19 +75,18 @@ globalIndex2Position n i
             , (-elementEdgeLen n) - (fromIntegral d) * (elementEdgeLen n))
 
 g :: Int -> (Double, Double) -> Double
-g n (x,y) =
-    let
-        d a b = abs (a - b)
-        (~=) a b = d a b < elementEdgeLen n / 2
+g n (x,y) = (x ** 2) ** (1/3)
+    -- let
+    --     d a b = abs (a - b)
+    --     (~=) a b = d a b < elementEdgeLen n / 2
 
-        g'
-            | x ~= (-1) = -y
-            | x ~= 1    = y
-            | y ~= (-1) = -x
-            | y ~= 1    = x
-    in
-        g'
-        -- (x ** 2) ** (1/3)
+    --     g'
+    --         | x ~= (-1) = -y
+    --         | x ~= 1    = y
+    --         | y ~= (-1) = -x
+    --         | y ~= 1    = x
+    -- in
+    --     g'
 
 lastUpperPointIndex :: Int -> Int
 lastUpperPointIndex n = (2*n + 1)*(n+1) - 1
